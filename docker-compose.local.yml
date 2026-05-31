@@ -1,0 +1,78 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+
+services:
+  site-a-site:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.local
+      args:
+        BASE_PHP_IMAGE: ${PHP_IMAGE_NAME:-portfolio-multisite-php:8.5}
+        APP_DIR: site-a
+    image: ${SITE_A_LOCAL_PHP_IMAGE_NAME:-portfolio-site-a-php:local}
+    pull_policy: never
+    volumes:
+      - ${SITE_A_PROJECT_PATH:-/opt/portfolio-multisite/site-a}/site/www:/var/www/html/site-a
+      - ./configs/php/site-a.ini:/usr/local/etc/php/conf.d/99-project.ini:ro
+      - ${SITE_A_STORAGE_PATH:-/opt/portfolio-multisite/site-a/storage}:/var/www/html/site-a/storage
+
+  site-b-site:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.local
+      args:
+        BASE_PHP_IMAGE: ${PHP_IMAGE_NAME:-portfolio-multisite-php:8.5}
+        APP_DIR: site-b
+    image: ${SITE_B_LOCAL_PHP_IMAGE_NAME:-portfolio-site-b-php:local}
+    pull_policy: never
+    volumes:
+      - ${SITE_B_PROJECT_PATH:-/opt/portfolio-multisite/site-b}/site/www:/var/www/html/site-b
+      - ./configs/php/site-b.ini:/usr/local/etc/php/conf.d/99-project.ini:ro
+
+  site-c-site:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.local
+      args:
+        BASE_PHP_IMAGE: ${PHP_IMAGE_NAME:-portfolio-multisite-php:8.5}
+        APP_DIR: site-c
+    image: ${SITE_C_LOCAL_PHP_IMAGE_NAME:-portfolio-site-c-php:local}
+    pull_policy: never
+    volumes:
+      - ${SITE_C_PROJECT_PATH:-/opt/portfolio-multisite/site-c}/site/www:/var/www/html/site-c
+      - ./configs/php/site-c.ini:/usr/local/etc/php/conf.d/99-project.ini:ro
+
+  nginx-local:
+    build:
+      context: .
+      dockerfile: docker/nginx/Dockerfile
+      args:
+        NGINX_VERSION: ${NGINX_VERSION:-1.30.1}
+    image: ${LOCAL_NGINX_IMAGE_NAME:-portfolio-multisite-nginx:local}
+    pull_policy: never
+    container_name: portfolio.local.nginx
+    profiles:
+      - local
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+    command: /bin/bash -c "rm -f /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+    volumes:
+      - ${SITE_A_PROJECT_PATH:-/opt/portfolio-multisite/site-a}/site/www:/var/www/html/site-a:ro
+      - ${SITE_B_PROJECT_PATH:-/opt/portfolio-multisite/site-b}/site/www:/var/www/html/site-b:ro
+      - ${SITE_C_PROJECT_PATH:-/opt/portfolio-multisite/site-c}/site/www:/var/www/html/site-c:ro
+      - ./configs/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./configs/nginx/local.conf:/etc/nginx/conf.d/local.conf:ro
+    ports:
+      - "${LOCAL_SITE_A_HTTP_PORT:-8081}:8081"
+      - "${LOCAL_SITE_B_HTTP_PORT:-8082}:8082"
+      - "${LOCAL_SITE_C_HTTP_PORT:-8083}:8083"
+    depends_on:
+      - site-a-site
+      - site-b-site
+      - site-c-site
+    networks:
+      site-a-net:
+        aliases:
+          - proxy-nginx-1
+      site-b-net: {}
+      site-c-net: {}

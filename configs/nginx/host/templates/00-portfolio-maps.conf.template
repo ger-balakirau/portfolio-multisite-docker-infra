@@ -1,0 +1,52 @@
+fastcgi_cache_path /var/cache/nginx/portfolio-multisite levels=1:2 keys_zone=portfolio_microcache:64m inactive=10m max_size=512m use_temp_path=off;
+fastcgi_cache_key "$scheme$request_method$host$request_uri";
+
+__GZIP_HTTP_CONFIG__
+__BROTLI_HTTP_CONFIG__
+
+map $http_cookie $portfolio_bypass_cache {
+    default 0;
+    ~*(PHPSESSID|sessionid|wordpress_logged_in|wp-postpass|comment_author) 1;
+}
+
+map $request_method $portfolio_cacheable_method {
+    default 0;
+    GET 1;
+    HEAD 1;
+}
+
+map $request_uri $portfolio_skip_cache_uri {
+    default 0;
+    ~^/admin/ 1;
+    ~^/admin 1;
+    ~^/api 1;
+    ~^/health\.php$ 1;
+}
+
+map $query_string $portfolio_skip_cache_qs {
+    default 1;
+    '' 0;
+}
+
+map "$portfolio_cacheable_method:$portfolio_bypass_cache:$portfolio_skip_cache_uri:$portfolio_skip_cache_qs" $portfolio_skip_fastcgi_cache {
+    default 1;
+    "1:0:0:0" 0;
+}
+
+upstream portfolio_site_a_fpm {
+    server __SITE_A_FPM_UPSTREAM__;
+    server __SITE_A_LEGACY_FPM_UPSTREAM__ backup;
+    keepalive 8;
+}
+
+upstream portfolio_site_b_fpm {
+    server __SITE_B_FPM_UPSTREAM__;
+    server __SITE_B_LEGACY_FPM_UPSTREAM__ backup;
+    keepalive 8;
+}
+
+upstream portfolio_site_c_fpm {
+    server __SITE_C_FPM_UPSTREAM__;
+    server __SITE_C_LEGACY_FPM_UPSTREAM__ backup;
+    keepalive 8;
+}

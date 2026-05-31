@@ -1,0 +1,90 @@
+server {
+    listen 80;
+    server_name site-b.example.com www.site-b.example.com;
+
+    location /.well-known/acme-challenge/ {
+        root __CERTBOT_ROOT__;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen 443 quic;
+    http2 on;
+    server_name site-b.example.com www.site-b.example.com;
+
+    ssl_certificate __LETSENCRYPT_ROOT__/live/site-b.example.com/fullchain.pem;
+    ssl_certificate_key __LETSENCRYPT_ROOT__/live/site-b.example.com/privkey.pem;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:PORTFOLIOSSL:10m;
+    ssl_session_tickets off;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    root __RELEASE_ROOT__/site-b/site/www;
+    index index.php index.html;
+
+    client_max_body_size 32m;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    add_header Alt-Svc 'h3=":443"; ma=86400' always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~* /(composer\.(json|lock)|package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml)$ {
+        deny all;
+    }
+
+    location = /health.php {
+        try_files $uri =404;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/html/site-b$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT /var/www/html/site-b;
+        fastcgi_param HTTPS on;
+        fastcgi_pass portfolio_site_b_fpm;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~* \.(?:css|js|jpg|jpeg|png|gif|ico|svg|webp|woff2?|ttf)$ {
+        expires 7d;
+        access_log off;
+        add_header Cache-Control "public";
+        try_files $uri =404;
+    }
+
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_cache portfolio_microcache;
+        fastcgi_cache_bypass $portfolio_skip_fastcgi_cache;
+        fastcgi_no_cache $portfolio_skip_fastcgi_cache;
+        fastcgi_cache_lock on;
+        fastcgi_cache_background_update on;
+        fastcgi_cache_use_stale error timeout invalid_header updating http_500 http_503;
+        fastcgi_cache_valid 200 301 302 5s;
+        fastcgi_cache_valid 404 1s;
+        fastcgi_next_upstream error timeout invalid_header http_500 http_503;
+        fastcgi_next_upstream_tries 2;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME /var/www/html/site-b$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT /var/www/html/site-b;
+        fastcgi_param HTTPS on;
+        fastcgi_pass portfolio_site_b_fpm;
+        fastcgi_read_timeout 120;
+        add_header X-FastCGI-Cache $upstream_cache_status always;
+    }
+}

@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/compose-spec/compose-spec/master/schema/compose-spec.json
+name: multisite-portfolio
+
+x-strict-json-logs: &strict-json-logs
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-3}"
+
+services:
+  site-a-mysql:
+    image: mysql:8.4
+    container_name: portfolio.site-a.db
+    restart: unless-stopped
+    logging: *strict-json-logs
+    env_file:
+      - path: ${SITE_A_PROJECT_PATH:-/opt/portfolio-multisite/site-a}/.env
+        required: false
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+    ports:
+      - "${SITE_A_MYSQL_PORT:-127.0.0.1:33061}:3306"
+    command:
+      - mysqld
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --sql-mode=NO_ENGINE_SUBSTITUTION
+      - --local-infile=1
+    volumes:
+      - site-a-mysql-data:/var/lib/mysql
+      - ./configs/mysql/site-a.cnf:/etc/mysql/conf.d/99-custom.cnf:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 10
+    networks:
+      site-a-net:
+        aliases:
+          - mysql
+
+  site-a-site:
+    image: ${SITE_A_PHP_IMAGE:-ghcr.io/example/portfolio-site-a-php:latest}
+    pull_policy: ${PHP_PULL_POLICY:-always}
+    container_name: portfolio.site-a.app
+    restart: unless-stopped
+    logging: *strict-json-logs
+    env_file:
+      - path: ${SITE_A_PROJECT_PATH:-/opt/portfolio-multisite/site-a}/.env
+        required: false
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+    ports:
+      - "${SITE_A_FPM_PORT:-127.0.0.1:9001}:9000"
+    volumes:
+      - ./configs/php/site-a.ini:/usr/local/etc/php/conf.d/99-project.ini:ro
+      - ${SITE_A_STORAGE_PATH:-/opt/portfolio-multisite/site-a/storage}:/var/www/html/site-a/storage
+    working_dir: /var/www/html/site-a
+    depends_on:
+      site-a-mysql:
+        condition: service_healthy
+    networks:
+      site-a-net:
+        aliases:
+          - site-a-fpm
+
+  site-b-site:
+    image: ${SITE_B_PHP_IMAGE:-ghcr.io/example/portfolio-site-b-php:latest}
+    pull_policy: ${PHP_PULL_POLICY:-always}
+    container_name: portfolio.site-b.app
+    restart: unless-stopped
+    logging: *strict-json-logs
+    env_file:
+      - path: ${SITE_B_PROJECT_PATH:-/opt/portfolio-multisite/site-b}/.env
+        required: false
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+    ports:
+      - "${SITE_B_FPM_PORT:-127.0.0.1:9002}:9000"
+    volumes:
+      - ./configs/php/site-b.ini:/usr/local/etc/php/conf.d/99-project.ini:ro
+    working_dir: /var/www/html/site-b
+    networks:
+      site-b-net:
+        aliases:
+          - site-b-fpm
+
+  site-c-site:
+    image: ${SITE_C_PHP_IMAGE:-ghcr.io/example/portfolio-site-c-php:latest}
+    pull_policy: ${PHP_PULL_POLICY:-always}
+    container_name: portfolio.site-c.app
+    restart: unless-stopped
+    logging: *strict-json-logs
+    env_file:
+      - path: ${SITE_C_PROJECT_PATH:-/opt/portfolio-multisite/site-c}/.env
+        required: false
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+    ports:
+      - "${SITE_C_FPM_PORT:-127.0.0.1:9003}:9000"
+    volumes:
+      - ./configs/php/site-c.ini:/usr/local/etc/php/conf.d/99-project.ini:ro
+    working_dir: /var/www/html/site-c
+    networks:
+      site-c-net:
+        aliases:
+          - site-c-fpm
+
+networks:
+  site-a-net:
+    name: portfolio-site-a-net
+    driver: bridge
+  site-b-net:
+    name: portfolio-site-b-net
+    driver: bridge
+  site-c-net:
+    name: portfolio-site-c-net
+    driver: bridge
+
+volumes:
+  site-a-mysql-data:

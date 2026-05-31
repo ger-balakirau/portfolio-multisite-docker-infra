@@ -1,0 +1,5 @@
+ARG BASE_PHP_IMAGE=portfolio-multisite-php:8.5
+FROM ${BASE_PHP_IMAGE}
+
+ARG APP_DIR
+WORKDIR /var/www/html/${APP_DIR}
